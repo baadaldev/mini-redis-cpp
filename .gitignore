@@ -1,0 +1,17 @@
+# Binaries and executables
+*.exe
+*.o
+*.obj
+*.dll
+*.so
+
+# Database files
+*.aof
+*.aof.tmp
+*.log
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.user
