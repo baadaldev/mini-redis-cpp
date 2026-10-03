@@ -144,7 +144,16 @@ This compiles `mini_redis.exe` and executes all 7 unit test suites.
 You can connect using any standard Redis client or the included test client:
 ```cmd
 python client/test_client.py 6379
+
 ```
+## ⚙️ Configuration & CLI Flags
+The server accepts several command-line flags to customize runtime behavior:
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--port <num>` | `6379` | TCP port number to listen on |
+| `--aof <file>` | `data.aof` | Path to the Append-Only File for WAL persistence |
+| `--maxmemory <bytes>` | `100MB` | Maximum memory limit before LRU eviction triggers |
+| `--sync-every-write` | `true` | Flush write-ahead log to disk synchronously on mutation |
 
 Or connect via interactive `redis-cli`:
 ```bash
