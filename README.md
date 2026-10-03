@@ -1,4 +1,5 @@
 # MiniRedis-CPP 🚀
+#For my personal use
 
 A high-performance, in-memory key-value database engine built from scratch in modern **C++**, featuring **RESP (REdis Serialization Protocol)** compliance, **LRU Cache Eviction**, **TTL (Time-To-Live)** expiration, and **WAL (Write-Ahead Logging / AOF)** durability.
 
