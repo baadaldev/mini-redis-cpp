@@ -175,6 +175,11 @@ void test_wal_recovery() {
         size_t list_len = 0;
         engine.rpush("wal_list", {"item1", "item2"}, list_len);
         wal.append_command({"RPUSH", "wal_list", "item1", "item2"});
+
+        int added = 0;
+        engine.hset("wal_hash", "username", "baadal", added, err);
+        engine.hset("wal_hash", "lang", "cpp", added, err);
+        wal.append_command({"HSET", "wal_hash", "username", "baadal", "lang", "cpp"});
     }
 
     // Now simulate restart: Create brand new engine and recover from WAL
@@ -182,7 +187,7 @@ void test_wal_recovery() {
         StorageEngine recovered_engine;
         WalManager recovery_wal(wal_path);
         size_t count = recovery_wal.recover(recovered_engine);
-        assert(count == 3);
+        assert(count == 4);
 
         std::string val;
         assert(recovered_engine.get("persisted_key", val));
@@ -195,10 +200,87 @@ void test_wal_recovery() {
         assert(recovered_engine.lrange("wal_list", 0, -1, list_items));
         assert(list_items.size() == 2);
         assert(list_items[0] == "item1" && list_items[1] == "item2");
+
+        std::string hash_val;
+        bool hash_found = false;
+        std::string hash_err;
+        assert(recovered_engine.hget("wal_hash", "username", hash_val, hash_found, hash_err));
+        assert(hash_found && hash_val == "baadal");
+        assert(recovered_engine.hget("wal_hash", "lang", hash_val, hash_found, hash_err));
+        assert(hash_found && hash_val == "cpp");
     }
 
     std::remove(wal_path.c_str());
     std::cout << "  -> WAL Persistence & Recovery PASSED!\n";
+}
+
+void test_hash_operations() {
+    std::cout << "[TEST] Running Hash Operations (HSET, HGET, HDEL, HGETALL, etc.)...\n";
+    StorageEngine engine;
+    std::string err;
+    int added = 0;
+
+    // HSET new fields
+    assert(engine.hset("user:100", "name", "Baadal", added, err));
+    assert(added == 1);
+    assert(engine.hset("user:100", "role", "Engineer", added, err));
+    assert(added == 1);
+
+    // HSET existing field (update)
+    assert(engine.hset("user:100", "role", "Lead Engineer", added, err));
+    assert(added == 0);
+
+    // HGET
+    std::string val;
+    bool found = false;
+    assert(engine.hget("user:100", "name", val, found, err));
+    assert(found && val == "Baadal");
+    assert(engine.hget("user:100", "role", val, found, err));
+    assert(found && val == "Lead Engineer");
+    assert(engine.hget("user:100", "nonexistent", val, found, err));
+    assert(!found);
+
+    // HEXISTS & HLEN
+    bool exists = false;
+    assert(engine.hexists("user:100", "name", exists, err));
+    assert(exists);
+    assert(engine.hexists("user:100", "unknown", exists, err));
+    assert(!exists);
+
+    size_t length = 0;
+    assert(engine.hlen("user:100", length, err));
+    assert(length == 2);
+
+    // HGETALL
+    std::vector<std::pair<std::string, std::string>> all_items;
+    assert(engine.hgetall("user:100", all_items, err));
+    assert(all_items.size() == 2);
+
+    // HKEYS & HVALS
+    std::vector<std::string> keys, vals;
+    assert(engine.hkeys("user:100", keys, err));
+    assert(keys.size() == 2);
+    assert(engine.hvals("user:100", vals, err));
+    assert(vals.size() == 2);
+
+    // HDEL
+    int deleted = 0;
+    assert(engine.hdel("user:100", {"name"}, deleted, err));
+    assert(deleted == 1);
+    assert(engine.hlen("user:100", length, err));
+    assert(length == 1);
+
+    // Delete remaining field -> key should be deleted
+    assert(engine.hdel("user:100", {"role"}, deleted, err));
+    assert(deleted == 1);
+    assert(!engine.exists("user:100"));
+
+    // Type error test: Can't HSET on a string key
+    engine.set("plain_str", "hello");
+    assert(!engine.hset("plain_str", "f1", "v1", added, err));
+    assert(err.find("WRONGTYPE") != std::string::npos);
+
+    std::cout << "  -> Hash Operations PASSED!\n";
 }
 
 int main() {
@@ -211,9 +293,10 @@ int main() {
     test_ttl_and_expiry();
     test_lru_eviction();
     test_list_operations();
+    test_hash_operations();
     test_resp_parser();
     test_wal_recovery();
 
-    std::cout << "\n>>> ALL 7 TEST SUITES PASSED FLAWLESSLY! <<<\n";
+    std::cout << "\n>>> ALL 8 TEST SUITES PASSED FLAWLESSLY! <<<\n";
     return 0;
 }

@@ -183,6 +183,16 @@ std::string Server::execute_command(const std::vector<std::string>& tokens) {
     if (cmd == "LPOP") return handle_lpop(tokens);
     if (cmd == "RPOP") return handle_rpop(tokens);
     if (cmd == "LRANGE") return handle_lrange(tokens);
+    if (cmd == "HSET") return handle_hset(tokens);
+    if (cmd == "HGET") return handle_hget(tokens);
+    if (cmd == "HDEL") return handle_hdel(tokens);
+    if (cmd == "HEXISTS") return handle_hexists(tokens);
+    if (cmd == "HLEN") return handle_hlen(tokens);
+    if (cmd == "HGETALL") return handle_hgetall(tokens);
+    if (cmd == "HKEYS") return handle_hkeys(tokens);
+    if (cmd == "HVALS") return handle_hvals(tokens);
+    if (cmd == "HMSET") return handle_hmset(tokens);
+    if (cmd == "HMGET") return handle_hmget(tokens);
     if (cmd == "KEYS") return handle_keys(tokens);
     if (cmd == "DBSIZE") return handle_dbsize();
     if (cmd == "FLUSHALL") return handle_flushall();
@@ -380,3 +390,139 @@ std::string Server::handle_info() {
                        "\r\nkeys:" + std::to_string(storage_.dbsize()) + "\r\n";
     return RespParser::format_bulk_string(info);
 }
+
+std::string Server::handle_hset(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 4 || (tokens.size() - 2) % 2 != 0) {
+        return RespParser::format_error("wrong number of arguments for 'hset' command");
+    }
+    const std::string& key = tokens[1];
+    int total_added = 0;
+    std::string err;
+    for (size_t i = 2; i + 1 < tokens.size(); i += 2) {
+        int added = 0;
+        if (!storage_.hset(key, tokens[i], tokens[i + 1], added, err)) {
+            return RespParser::format_error(err);
+        }
+        total_added += added;
+    }
+    wal_.append_command(tokens);
+    return RespParser::format_integer(total_added);
+}
+
+std::string Server::handle_hmset(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 4 || (tokens.size() - 2) % 2 != 0) {
+        return RespParser::format_error("wrong number of arguments for 'hmset' command");
+    }
+    const std::string& key = tokens[1];
+    std::string err;
+    for (size_t i = 2; i + 1 < tokens.size(); i += 2) {
+        int added = 0;
+        if (!storage_.hset(key, tokens[i], tokens[i + 1], added, err)) {
+            return RespParser::format_error(err);
+        }
+    }
+    wal_.append_command(tokens);
+    return RespParser::format_simple_string("OK");
+}
+
+std::string Server::handle_hget(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'hget' command");
+    std::string value;
+    bool found = false;
+    std::string err;
+    if (!storage_.hget(tokens[1], tokens[2], value, found, err)) {
+        return RespParser::format_error(err);
+    }
+    if (found) return RespParser::format_bulk_string(value);
+    return RespParser::format_nil();
+}
+
+std::string Server::handle_hmget(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'hmget' command");
+    const std::string& key = tokens[1];
+    std::vector<std::string> results;
+    std::string err;
+    for (size_t i = 2; i < tokens.size(); ++i) {
+        std::string value;
+        bool found = false;
+        if (!storage_.hget(key, tokens[i], value, found, err)) {
+            return RespParser::format_error(err);
+        }
+        if (found) {
+            results.push_back(RespParser::format_bulk_string(value));
+        } else {
+            results.push_back(RespParser::format_nil());
+        }
+    }
+    std::string resp = "*" + std::to_string(results.size()) + "\r\n";
+    for (const auto& item : results) resp += item;
+    return resp;
+}
+
+std::string Server::handle_hdel(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'hdel' command");
+    std::vector<std::string> fields(tokens.begin() + 2, tokens.end());
+    int deleted = 0;
+    std::string err;
+    if (!storage_.hdel(tokens[1], fields, deleted, err)) {
+        return RespParser::format_error(err);
+    }
+    if (deleted > 0) wal_.append_command(tokens);
+    return RespParser::format_integer(deleted);
+}
+
+std::string Server::handle_hexists(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'hexists' command");
+    bool exists = false;
+    std::string err;
+    if (!storage_.hexists(tokens[1], tokens[2], exists, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_integer(exists ? 1 : 0);
+}
+
+std::string Server::handle_hlen(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'hlen' command");
+    size_t len = 0;
+    std::string err;
+    if (!storage_.hlen(tokens[1], len, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_integer(static_cast<int64_t>(len));
+}
+
+std::string Server::handle_hgetall(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'hgetall' command");
+    std::vector<std::pair<std::string, std::string>> items;
+    std::string err;
+    if (!storage_.hgetall(tokens[1], items, err)) {
+        return RespParser::format_error(err);
+    }
+    std::vector<std::string> flat;
+    for (const auto& p : items) {
+        flat.push_back(p.first);
+        flat.push_back(p.second);
+    }
+    return RespParser::format_array(flat);
+}
+
+std::string Server::handle_hkeys(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'hkeys' command");
+    std::vector<std::string> keys;
+    std::string err;
+    if (!storage_.hkeys(tokens[1], keys, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_array(keys);
+}
+
+std::string Server::handle_hvals(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'hvals' command");
+    std::vector<std::string> vals;
+    std::string err;
+    if (!storage_.hvals(tokens[1], vals, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_array(vals);
+}
+

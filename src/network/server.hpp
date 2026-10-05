@@ -49,6 +49,16 @@ private:
     std::string handle_lpop(const std::vector<std::string>& tokens);
     std::string handle_rpop(const std::vector<std::string>& tokens);
     std::string handle_lrange(const std::vector<std::string>& tokens);
+    std::string handle_hset(const std::vector<std::string>& tokens);
+    std::string handle_hget(const std::vector<std::string>& tokens);
+    std::string handle_hdel(const std::vector<std::string>& tokens);
+    std::string handle_hexists(const std::vector<std::string>& tokens);
+    std::string handle_hlen(const std::vector<std::string>& tokens);
+    std::string handle_hgetall(const std::vector<std::string>& tokens);
+    std::string handle_hkeys(const std::vector<std::string>& tokens);
+    std::string handle_hvals(const std::vector<std::string>& tokens);
+    std::string handle_hmset(const std::vector<std::string>& tokens);
+    std::string handle_hmget(const std::vector<std::string>& tokens);
     std::string handle_keys(const std::vector<std::string>& tokens);
     std::string handle_dbsize();
     std::string handle_flushall();

@@ -7,7 +7,7 @@ A high-performance, in-memory key-value database engine built from scratch in mo
 [![Language](https://img.shields.io/badge/Language-C%2B%2B14%2F17-00599C?logo=c%2B%2B)](https://isocpp.org/)
 [![Protocol](https://img.shields.io/badge/Protocol-RESP%20Compliant-red?logo=redis)](https://redis.io/docs/reference/protocol-spec/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20(Winsock2)-0078D6?logo=windows)](https://microsoft.com)
-[![Tests](https://img.shields.io/badge/Tests-7%2F7%20Passed-brightgreen)](#automated-testing)
+[![Tests](https://img.shields.io/badge/Tests-8%2F8%20Passed-brightgreen)](#automated-testing)
 [![Throughput](https://img.shields.io/badge/Throughput-35%2C000%2B%20ops%2Fsec-orange)](#performance--benchmarks)
 
 ---
@@ -89,6 +89,14 @@ Benchmarked locally using `client/benchmark.py` over loopback TCP:
 | **Lists** | `LPUSH` / `RPUSH` | Insert one or multiple elements at head or tail |
 | | `LPOP` / `RPOP` | Remove and return element from head or tail |
 | | `LRANGE key start stop`| Slice list elements (supports negative indexing) |
+| **Hashes** | `HSET key f v [f v ...]`| Set one or multiple field/value pairs in hash |
+| | `HGET key field` | Retrieve field value from hash |
+| | `HMSET` / `HMGET` | Set or get multiple hash fields at once |
+| | `HDEL key f [f ...]` | Delete one or more fields from hash |
+| | `HEXISTS key field` | Check if field exists in hash |
+| | `HLEN key` | Get total count of fields in hash |
+| | `HGETALL key` | Return all fields and values in hash |
+| | `HKEYS` / `HVALS` | Return all field names or values in hash |
 | **TTL** | `EXPIRE key seconds` | Set timeout on key |
 | | `TTL key` | Return remaining time to live in seconds |
 | **Persistence** | `BGREWRITEAOF` | Asynchronously rewrite append-only log file |
@@ -98,14 +106,13 @@ Benchmarked locally using `client/benchmark.py` over loopback TCP:
 ---
 
 ## 🛠️ Project Structure
-
 ```text
 mini-redis-cpp/
 ├── src/
 │   ├── core/
 │   │   ├── entry.hpp              # Value variant representation & TTL metadata
 │   │   ├── sync.hpp               # High-performance Win32 Mutex & LockGuard RAII
-│   │   ├── storage_engine.hpp     # In-memory storage with LRU & TTL
+│   │   ├── storage_engine.hpp     # In-memory storage with LRU, Hashes & TTL
 │   │   └── storage_engine.cpp
 │   ├── protocol/
 │   │   ├── resp_parser.hpp        # RESP parser & serializer
@@ -118,7 +125,7 @@ mini-redis-cpp/
 │   │   └── server.cpp
 │   └── main.cpp                   # CLI parsing, banner, & graceful shutdown
 ├── tests/
-│   └── test_engine.cpp            # 7-phase automated test suite
+│   └── test_engine.cpp            # 8-phase automated test suite
 ├── client/
 │   ├── test_client.py             # Live TCP integration tests
 │   └── benchmark.py               # Throughput & latency benchmark
@@ -135,7 +142,7 @@ Clone the repository and run the build script:
 ```cmd
 build.bat
 ```
-This compiles `mini_redis.exe` and executes all 7 unit test suites.
+This compiles `mini_redis.exe` and executes all 8 unit test suites.
 
 ### 2. Start the Server
 ```cmd
@@ -160,26 +167,30 @@ The server accepts several command-line flags to customize runtime behavior:
 Or connect via interactive `redis-cli`:
 ```bash
 redis-cli -p 6379
-127.0.0.1:6379> SET user "Baadal"
-OK
-127.0.0.1:6379> GET user
+127.0.0.1:6379> HSET user:100 name "Baadal" role "Engineer"
+(integer) 2
+127.0.0.1:6379> HGET user:100 name
 "Baadal"
-127.0.0.1:6379> INCRBY views 10
-(integer) 10
+127.0.0.1:6379> HGETALL user:100
+1) "name"
+2) "Baadal"
+3) "role"
+4) "Engineer"
 ```
 
 ---
 
 ## 🧪 Automated Testing
 
-The automated test suite verifies 7 critical database subsystems:
+The automated test suite verifies 8 critical database subsystems:
 1. **Basic CRUD:** `SET`, `GET`, `DEL`, `EXISTS` semantics.
 2. **Numeric Increment:** Type checking and atomicity on `INCRBY`.
 3. **TTL & Expiry:** Millisecond accuracy and auto-cleanup.
 4. **LRU Cache Eviction:** Capacity limits and eviction of least recently accessed keys.
 5. **List Operations:** Negative indexing, `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`.
-6. **RESP Parser:** Verification of Arrays, Bulk Strings, Inlines, Errors, and Integers.
-7. **WAL Durability:** Simulated crash and 100% state recovery from append-only logs.
+6. **Hash Operations:** `HSET`, `HGET`, `HMSET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HGETALL`, `HKEYS`, `HVALS`.
+7. **RESP Parser:** Verification of Arrays, Bulk Strings, Inlines, Errors, and Integers.
+8. **WAL Durability:** Simulated crash and 100% state recovery from append-only logs.
 
 Run tests anytime:
 ```cmd

@@ -89,6 +89,19 @@ size_t WalManager::recover(StorageEngine& engine) {
             size_t new_len = 0;
             engine.lpush(tokens[1], vals, new_len);
             replayed_count++;
+        } else if (cmd == "HSET" && tokens.size() >= 4) {
+            for (size_t i = 2; i + 1 < tokens.size(); i += 2) {
+                int added = 0;
+                std::string err;
+                engine.hset(tokens[1], tokens[i], tokens[i + 1], added, err);
+            }
+            replayed_count++;
+        } else if (cmd == "HDEL" && tokens.size() >= 3) {
+            std::vector<std::string> fields(tokens.begin() + 2, tokens.end());
+            int deleted = 0;
+            std::string err;
+            engine.hdel(tokens[1], fields, deleted, err);
+            replayed_count++;
         } else if (cmd == "FLUSHALL") {
             engine.flushall();
             replayed_count++;
@@ -106,6 +119,9 @@ bool WalManager::rewrite(StorageEngine& engine) {
     std::vector<std::string> keys = engine.get_all_keys();
     for (const auto& key : keys) {
         std::string val;
+        std::vector<std::string> list;
+        std::unordered_map<std::string, std::string> hash_map;
+
         if (engine.get(key, val)) {
             int64_t remaining_ttl = engine.ttl(key);
             std::vector<std::string> set_cmd = {"SET", key, val};
@@ -117,6 +133,19 @@ bool WalManager::rewrite(StorageEngine& engine) {
                 std::string exp_ser = RespParser::format_array(expire_cmd);
                 tmp_file.write(exp_ser.data(), exp_ser.size());
             }
+        } else if (engine.get_list(key, list) && !list.empty()) {
+            std::vector<std::string> rpush_cmd = {"RPUSH", key};
+            rpush_cmd.insert(rpush_cmd.end(), list.begin(), list.end());
+            std::string serialized = RespParser::format_array(rpush_cmd);
+            tmp_file.write(serialized.data(), serialized.size());
+        } else if (engine.get_hash(key, hash_map) && !hash_map.empty()) {
+            std::vector<std::string> hset_cmd = {"HSET", key};
+            for (const auto& pair : hash_map) {
+                hset_cmd.push_back(pair.first);
+                hset_cmd.push_back(pair.second);
+            }
+            std::string serialized = RespParser::format_array(hset_cmd);
+            tmp_file.write(serialized.data(), serialized.size());
         }
     }
 

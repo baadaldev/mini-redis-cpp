@@ -34,6 +34,20 @@ public:
     bool rpop(const std::string& key, std::string& value);
     bool lrange(const std::string& key, int64_t start, int64_t stop, std::vector<std::string>& results);
 
+    // Hash operations
+    bool hset(const std::string& key, const std::string& field, const std::string& value, int& added, std::string& err_msg);
+    bool hget(const std::string& key, const std::string& field, std::string& value, bool& found, std::string& err_msg);
+    bool hdel(const std::string& key, const std::vector<std::string>& fields, int& deleted_count, std::string& err_msg);
+    bool hexists(const std::string& key, const std::string& field, bool& exists, std::string& err_msg);
+    bool hlen(const std::string& key, size_t& length, std::string& err_msg);
+    bool hgetall(const std::string& key, std::vector<std::pair<std::string, std::string>>& items, std::string& err_msg);
+    bool hkeys(const std::string& key, std::vector<std::string>& keys, std::string& err_msg);
+    bool hvals(const std::string& key, std::vector<std::string>& vals, std::string& err_msg);
+
+    // Retrieval helpers for persistence & inspection
+    bool get_hash(const std::string& key, std::unordered_map<std::string, std::string>& hash_map);
+    bool get_list(const std::string& key, std::vector<std::string>& list);
+
     // Server management
     void flushall();
     size_t dbsize();

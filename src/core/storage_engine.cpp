@@ -312,3 +312,238 @@ size_t StorageEngine::purge_expired() {
     }
     return purged;
 }
+
+bool StorageEngine::hset(const std::string& key, const std::string& field, const std::string& value, int& added, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    is_expired_locked(key, now);
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        std::unordered_map<std::string, std::string> h;
+        h[field] = value;
+        store_[key] = Entry(h);
+        touch_lru_locked(key);
+        evict_if_needed_locked();
+        added = 1;
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    auto& hash_map = it->second.hash_val;
+    auto field_it = hash_map.find(field);
+    if (field_it == hash_map.end()) {
+        hash_map[field] = value;
+        added = 1;
+    } else {
+        field_it->second = value;
+        added = 0;
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hget(const std::string& key, const std::string& field, std::string& value, bool& found, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) {
+        found = false;
+        return true;
+    }
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        found = false;
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    auto field_it = it->second.hash_val.find(field);
+    if (field_it != it->second.hash_val.end()) {
+        value = field_it->second;
+        found = true;
+    } else {
+        found = false;
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hdel(const std::string& key, const std::vector<std::string>& fields, int& deleted_count, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    deleted_count = 0;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) {
+        return true;
+    }
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    auto& hash_map = it->second.hash_val;
+    for (const auto& f : fields) {
+        if (hash_map.erase(f) > 0) {
+            deleted_count++;
+        }
+    }
+
+    if (hash_map.empty()) {
+        remove_key_locked(key);
+    } else {
+        touch_lru_locked(key);
+    }
+    return true;
+}
+
+bool StorageEngine::hexists(const std::string& key, const std::string& field, bool& exists, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    exists = false;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) {
+        return true;
+    }
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    exists = (it->second.hash_val.find(field) != it->second.hash_val.end());
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hlen(const std::string& key, size_t& length, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    length = 0;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) {
+        return true;
+    }
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    length = it->second.hash_val.size();
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hgetall(const std::string& key, std::vector<std::pair<std::string, std::string>>& items, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    items.clear();
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) {
+        return true;
+    }
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        return true;
+    }
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& pair : it->second.hash_val) {
+        items.push_back(pair);
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hkeys(const std::string& key, std::vector<std::string>& keys, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    keys.clear();
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& pair : it->second.hash_val) {
+        keys.push_back(pair.first);
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::hvals(const std::string& key, std::vector<std::string>& vals, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    vals.clear();
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::HASH) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& pair : it->second.hash_val) {
+        vals.push_back(pair.second);
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::get_hash(const std::string& key, std::unordered_map<std::string, std::string>& hash_map) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return false;
+
+    auto it = store_.find(key);
+    if (it == store_.end() || it->second.type != ValueType::HASH) return false;
+
+    hash_map = it->second.hash_val;
+    return true;
+}
+
+bool StorageEngine::get_list(const std::string& key, std::vector<std::string>& list) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return false;
+
+    auto it = store_.find(key);
+    if (it == store_.end() || it->second.type != ValueType::LIST) return false;
+
+    list = it->second.list_val;
+    return true;
+}
+

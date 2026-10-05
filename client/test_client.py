@@ -97,7 +97,32 @@ def run_tests(port=6379):
     print(f"GET short_lived_key after expire -> {expired_get} (Expected: None)")
     assert expired_get is None
 
-    # 6. DBSIZE
+    # 6. Hash Operations (HSET, HGET, HEXISTS, HLEN, HGETALL, HDEL)
+    res = parse_resp(send_command(s, "HSET", "profile:baadal", "name", "Baadal", "role", "Engineer"))
+    print(f"HSET profile:baadal -> {res} (Expected: 2)")
+    assert res == 2
+
+    res = parse_resp(send_command(s, "HGET", "profile:baadal", "name"))
+    print(f"HGET profile:baadal name -> {res} (Expected: Baadal)")
+    assert res == "Baadal"
+
+    res = parse_resp(send_command(s, "HEXISTS", "profile:baadal", "role"))
+    print(f"HEXISTS profile:baadal role -> {res} (Expected: 1)")
+    assert res == 1
+
+    res = parse_resp(send_command(s, "HLEN", "profile:baadal"))
+    print(f"HLEN profile:baadal -> {res} (Expected: 2)")
+    assert res == 2
+
+    res = parse_resp(send_command(s, "HGETALL", "profile:baadal"))
+    print(f"HGETALL profile:baadal -> {res}")
+    assert "name" in res and "Baadal" in res and "role" in res and "Engineer" in res
+
+    res = parse_resp(send_command(s, "HDEL", "profile:baadal", "role"))
+    print(f"HDEL profile:baadal role -> {res} (Expected: 1)")
+    assert res == 1
+
+    # 7. DBSIZE
     dbsize = parse_resp(send_command(s, "DBSIZE"))
     print(f"DBSIZE -> {dbsize} keys")
 
