@@ -122,7 +122,50 @@ def run_tests(port=6379):
     print(f"HDEL profile:baadal role -> {res} (Expected: 1)")
     assert res == 1
 
-    # 7. DBSIZE
+    # 7. Set Operations (SADD, SMEMBERS, SISMEMBER, SCARD, SREM)
+    res = parse_resp(send_command(s, "SADD", "skills", "C++", "Redis", "DistributedSystems"))
+    print(f"SADD skills -> {res} (Expected: 3)")
+    assert res == 3
+
+    res = parse_resp(send_command(s, "SCARD", "skills"))
+    print(f"SCARD skills -> {res} (Expected: 3)")
+    assert res == 3
+
+    res = parse_resp(send_command(s, "SISMEMBER", "skills", "C++"))
+    print(f"SISMEMBER skills C++ -> {res} (Expected: 1)")
+    assert res == 1
+
+    res = parse_resp(send_command(s, "SISMEMBER", "skills", "Rust"))
+    print(f"SISMEMBER skills Rust -> {res} (Expected: 0)")
+    assert res == 0
+
+    res = parse_resp(send_command(s, "SMEMBERS", "skills"))
+    print(f"SMEMBERS skills -> {res}")
+    assert isinstance(res, list) and len(res) == 3
+
+    res = parse_resp(send_command(s, "SREM", "skills", "DistributedSystems"))
+    print(f"SREM skills DistributedSystems -> {res} (Expected: 1)")
+    assert res == 1
+
+    # 8. Type command
+    res = parse_resp(send_command(s, "TYPE", "user"))
+    print(f"TYPE user -> {res} (Expected: string)")
+    assert res == "string"
+
+    res = parse_resp(send_command(s, "TYPE", "skills"))
+    print(f"TYPE skills -> {res} (Expected: set)")
+    assert res == "set"
+
+    # 9. Multi MSET & MGET
+    res = parse_resp(send_command(s, "MSET", "lang1", "C++", "lang2", "Python"))
+    print(f"MSET lang1 C++ lang2 Python -> {res} (Expected: OK)")
+    assert res == "OK"
+
+    res = parse_resp(send_command(s, "MGET", "lang1", "lang2", "nonexistent_key"))
+    print(f"MGET lang1 lang2 nonexistent_key -> {res}")
+    assert res == ["C++", "Python", None]
+
+    # 10. DBSIZE
     dbsize = parse_resp(send_command(s, "DBSIZE"))
     print(f"DBSIZE -> {dbsize} keys")
 

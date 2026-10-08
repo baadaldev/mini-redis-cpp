@@ -21,11 +21,13 @@ void Server::stop() {
 }
 
 void Server::start() {
+#ifdef _WIN32
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         std::cerr << "[ERROR] WSAStartup failed.\n";
         return;
     }
+#endif
 
     // Step 1: Recover data from WAL if file exists
     std::cout << "[INFO] Recovering state from WAL file: " << aof_path_ << "...\n";
@@ -36,14 +38,16 @@ void Server::start() {
     // Step 2: Set up TCP Socket
     listen_socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listen_socket_ == INVALID_SOCKET) {
-        std::cerr << "[ERROR] Could not create socket: " << WSAGetLastError() << "\n";
+        std::cerr << "[ERROR] Could not create socket\n";
+#ifdef _WIN32
         WSACleanup();
+#endif
         return;
     }
 
     // Reuse address
-    char opt = 1;
-    setsockopt(listen_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    int opt = 1;
+    setsockopt(listen_socket_, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
 
     sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -51,16 +55,20 @@ void Server::start() {
     server_addr.sin_port = htons(static_cast<u_short>(port_));
 
     if (bind(listen_socket_, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        std::cerr << "[ERROR] Bind failed on port " << port_ << ": " << WSAGetLastError() << "\n";
+        std::cerr << "[ERROR] Bind failed on port " << port_ << "\n";
         closesocket(listen_socket_);
+#ifdef _WIN32
         WSACleanup();
+#endif
         return;
     }
 
     if (listen(listen_socket_, SOMAXCONN) == SOCKET_ERROR) {
-        std::cerr << "[ERROR] Listen failed: " << WSAGetLastError() << "\n";
+        std::cerr << "[ERROR] Listen failed\n";
         closesocket(listen_socket_);
+#ifdef _WIN32
         WSACleanup();
+#endif
         return;
     }
 
@@ -73,7 +81,11 @@ void Server::start() {
     // Background thread for active TTL expiration
     Thread::spawn_detached([this]() {
         while (running_) {
+#ifdef _WIN32
             Sleep(1000);
+#else
+            usleep(1000 * 1000);
+#endif
             if (!running_) break;
             storage_.purge_expired();
         }
@@ -82,12 +94,16 @@ void Server::start() {
     // Main accept loop
     while (running_) {
         sockaddr_in client_addr;
+#ifdef _WIN32
         int client_len = sizeof(client_addr);
+#else
+        socklen_t client_len = sizeof(client_addr);
+#endif
         SOCKET client_sock = accept(listen_socket_, (sockaddr*)&client_addr, &client_len);
 
         if (client_sock == INVALID_SOCKET) {
             if (!running_) break;
-            std::cerr << "[WARN] Accept error: " << WSAGetLastError() << "\n";
+            std::cerr << "[WARN] Accept error\n";
             continue;
         }
 
@@ -97,7 +113,9 @@ void Server::start() {
         });
     }
 
+#ifdef _WIN32
     WSACleanup();
+#endif
 }
 
 void Server::handle_client(SOCKET client_sock) {
@@ -193,6 +211,14 @@ std::string Server::execute_command(const std::vector<std::string>& tokens) {
     if (cmd == "HVALS") return handle_hvals(tokens);
     if (cmd == "HMSET") return handle_hmset(tokens);
     if (cmd == "HMGET") return handle_hmget(tokens);
+    if (cmd == "SADD") return handle_sadd(tokens);
+    if (cmd == "SMEMBERS") return handle_smembers(tokens);
+    if (cmd == "SISMEMBER") return handle_sismember(tokens);
+    if (cmd == "SREM") return handle_srem(tokens);
+    if (cmd == "SCARD") return handle_scard(tokens);
+    if (cmd == "TYPE") return handle_type(tokens);
+    if (cmd == "MGET") return handle_mget(tokens);
+    if (cmd == "MSET") return handle_mset(tokens);
     if (cmd == "KEYS") return handle_keys(tokens);
     if (cmd == "DBSIZE") return handle_dbsize();
     if (cmd == "FLUSHALL") return handle_flushall();
@@ -525,4 +551,99 @@ std::string Server::handle_hvals(const std::vector<std::string>& tokens) {
     }
     return RespParser::format_array(vals);
 }
+
+std::string Server::handle_sadd(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'sadd' command");
+    const std::string& key = tokens[1];
+    std::vector<std::string> members(tokens.begin() + 2, tokens.end());
+    int added = 0;
+    std::string err;
+    if (!storage_.sadd(key, members, added, err)) {
+        return RespParser::format_error(err);
+    }
+    if (added > 0) wal_.append_command(tokens);
+    return RespParser::format_integer(added);
+}
+
+std::string Server::handle_smembers(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'smembers' command");
+    const std::string& key = tokens[1];
+    std::vector<std::string> members;
+    std::string err;
+    if (!storage_.smembers(key, members, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_array(members);
+}
+
+std::string Server::handle_sismember(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'sismember' command");
+    const std::string& key = tokens[1];
+    const std::string& member = tokens[2];
+    bool is_member = false;
+    std::string err;
+    if (!storage_.sismember(key, member, is_member, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_integer(is_member ? 1 : 0);
+}
+
+std::string Server::handle_srem(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) return RespParser::format_error("wrong number of arguments for 'srem' command");
+    const std::string& key = tokens[1];
+    std::vector<std::string> members(tokens.begin() + 2, tokens.end());
+    int removed = 0;
+    std::string err;
+    if (!storage_.srem(key, members, removed, err)) {
+        return RespParser::format_error(err);
+    }
+    if (removed > 0) wal_.append_command(tokens);
+    return RespParser::format_integer(removed);
+}
+
+std::string Server::handle_scard(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'scard' command");
+    const std::string& key = tokens[1];
+    size_t card = 0;
+    std::string err;
+    if (!storage_.scard(key, card, err)) {
+        return RespParser::format_error(err);
+    }
+    return RespParser::format_integer(static_cast<int64_t>(card));
+}
+
+std::string Server::handle_type(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'type' command");
+    std::string t = storage_.type(tokens[1]);
+    return RespParser::format_simple_string(t);
+}
+
+std::string Server::handle_mget(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) return RespParser::format_error("wrong number of arguments for 'mget' command");
+    std::vector<std::string> keys(tokens.begin() + 1, tokens.end());
+    auto results = storage_.mget(keys);
+    std::string resp = "*" + std::to_string(results.size()) + "\r\n";
+    for (const auto& r : results) {
+        if (r.first) {
+            resp += RespParser::format_bulk_string(r.second);
+        } else {
+            resp += RespParser::format_nil();
+        }
+    }
+    return resp;
+}
+
+std::string Server::handle_mset(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3 || (tokens.size() - 1) % 2 != 0) {
+        return RespParser::format_error("wrong number of arguments for 'mset' command");
+    }
+    std::vector<std::pair<std::string, std::string>> kvs;
+    for (size_t i = 1; i + 1 < tokens.size(); i += 2) {
+        kvs.push_back({tokens[i], tokens[i + 1]});
+    }
+    storage_.mset(kvs);
+    wal_.append_command(tokens);
+    return RespParser::format_simple_string("OK");
+}
+
 

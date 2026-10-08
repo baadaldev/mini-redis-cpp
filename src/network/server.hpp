@@ -4,7 +4,21 @@
 #include "../core/storage_engine.hpp"
 #include "../persistence/wal.hpp"
 #include "../core/sync.hpp"
+#ifdef _WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+typedef int SOCKET;
+#define INVALID_SOCKET (-1)
+#define SOCKET_ERROR (-1)
+#define closesocket(s) close(s)
+#endif
+
 #include <string>
 #include <vector>
 
@@ -59,6 +73,14 @@ private:
     std::string handle_hvals(const std::vector<std::string>& tokens);
     std::string handle_hmset(const std::vector<std::string>& tokens);
     std::string handle_hmget(const std::vector<std::string>& tokens);
+    std::string handle_sadd(const std::vector<std::string>& tokens);
+    std::string handle_smembers(const std::vector<std::string>& tokens);
+    std::string handle_sismember(const std::vector<std::string>& tokens);
+    std::string handle_srem(const std::vector<std::string>& tokens);
+    std::string handle_scard(const std::vector<std::string>& tokens);
+    std::string handle_type(const std::vector<std::string>& tokens);
+    std::string handle_mget(const std::vector<std::string>& tokens);
+    std::string handle_mset(const std::vector<std::string>& tokens);
     std::string handle_keys(const std::vector<std::string>& tokens);
     std::string handle_dbsize();
     std::string handle_flushall();

@@ -3,7 +3,14 @@
 #include "../src/persistence/wal.hpp"
 #include <iostream>
 #include <cassert>
+
+#ifdef _WIN32
 #include <windows.h>
+inline void portable_sleep_ms(int ms) { Sleep(ms); }
+#else
+#include <unistd.h>
+inline void portable_sleep_ms(int ms) { usleep(ms * 1000); }
+#endif
 
 void test_basic_crud() {
     std::cout << "[TEST] Running Basic CRUD Tests...\n";
@@ -61,7 +68,7 @@ void test_ttl_and_expiry() {
     assert(val == "temporary");
 
     // Wait 150ms
-    Sleep(150);
+    portable_sleep_ms(150);
     assert(!engine.get("temp_key", val)); // Should be expired and removed
     assert(!engine.exists("temp_key"));
 
@@ -180,6 +187,9 @@ void test_wal_recovery() {
         engine.hset("wal_hash", "username", "baadal", added, err);
         engine.hset("wal_hash", "lang", "cpp", added, err);
         wal.append_command({"HSET", "wal_hash", "username", "baadal", "lang", "cpp"});
+
+        engine.sadd("wal_set", {"tag1", "tag2"}, added, err);
+        wal.append_command({"SADD", "wal_set", "tag1", "tag2"});
     }
 
     // Now simulate restart: Create brand new engine and recover from WAL
@@ -187,7 +197,7 @@ void test_wal_recovery() {
         StorageEngine recovered_engine;
         WalManager recovery_wal(wal_path);
         size_t count = recovery_wal.recover(recovered_engine);
-        assert(count == 4);
+        assert(count == 5);
 
         std::string val;
         assert(recovered_engine.get("persisted_key", val));
@@ -208,6 +218,13 @@ void test_wal_recovery() {
         assert(hash_found && hash_val == "baadal");
         assert(recovered_engine.hget("wal_hash", "lang", hash_val, hash_found, hash_err));
         assert(hash_found && hash_val == "cpp");
+
+        bool is_member = false;
+        std::string set_err;
+        assert(recovered_engine.sismember("wal_set", "tag1", is_member, set_err));
+        assert(is_member);
+        assert(recovered_engine.sismember("wal_set", "tag2", is_member, set_err));
+        assert(is_member);
     }
 
     std::remove(wal_path.c_str());
@@ -283,6 +300,91 @@ void test_hash_operations() {
     std::cout << "  -> Hash Operations PASSED!\n";
 }
 
+void test_set_operations() {
+    std::cout << "[TEST] Running Set Operations (SADD, SMEMBERS, SISMEMBER, SREM, SCARD)...\n";
+    StorageEngine engine;
+    std::string err;
+    int added = 0;
+
+    // SADD
+    assert(engine.sadd("tech_stack", {"cpp", "redis", "linux"}, added, err));
+    assert(added == 3);
+
+    // SADD duplicates
+    assert(engine.sadd("tech_stack", {"cpp", "docker"}, added, err));
+    assert(added == 1); // Only docker was new
+
+    // SCARD
+    size_t card = 0;
+    assert(engine.scard("tech_stack", card, err));
+    assert(card == 4);
+
+    // SISMEMBER
+    bool is_member = false;
+    assert(engine.sismember("tech_stack", "cpp", is_member, err));
+    assert(is_member);
+    assert(engine.sismember("tech_stack", "python", is_member, err));
+    assert(!is_member);
+
+    // SMEMBERS
+    std::vector<std::string> members;
+    assert(engine.smembers("tech_stack", members, err));
+    assert(members.size() == 4);
+
+    // SREM
+    int removed = 0;
+    assert(engine.srem("tech_stack", {"docker", "nonexistent"}, removed, err));
+    assert(removed == 1);
+    assert(engine.scard("tech_stack", card, err));
+    assert(card == 3);
+
+    // Remove all remaining
+    assert(engine.srem("tech_stack", {"cpp", "redis", "linux"}, removed, err));
+    assert(removed == 3);
+    assert(!engine.exists("tech_stack")); // Set deleted when empty
+
+    // WRONGTYPE test
+    engine.set("string_key", "just_a_string");
+    assert(!engine.sadd("string_key", {"item"}, added, err));
+    assert(err.find("WRONGTYPE") != std::string::npos);
+
+    std::cout << "  -> Set Operations PASSED!\n";
+}
+
+void test_type_and_multi_operations() {
+    std::cout << "[TEST] Running Type & Multi-Operations (TYPE, MSET, MGET)...\n";
+    StorageEngine engine;
+    std::string err;
+    int added = 0;
+
+    // TYPE command checks
+    assert(engine.type("nonexistent") == "none");
+
+    engine.set("str_key", "hello");
+    assert(engine.type("str_key") == "string");
+
+    size_t list_len = 0;
+    engine.rpush("list_key", {"a", "b"}, list_len);
+    assert(engine.type("list_key") == "list");
+
+    engine.hset("hash_key", "field", "value", added, err);
+    assert(engine.type("hash_key") == "hash");
+
+    engine.sadd("set_key", {"mem1"}, added, err);
+    assert(engine.type("set_key") == "set");
+
+    // MSET & MGET
+    assert(engine.mset({{"m1", "val1"}, {"m2", "val2"}, {"m3", "val3"}}));
+    auto mget_res = engine.mget({"m1", "m2", "nonexistent", "m3"});
+    assert(mget_res.size() == 4);
+    assert(mget_res[0].first && mget_res[0].second == "val1");
+    assert(mget_res[1].first && mget_res[1].second == "val2");
+    assert(!mget_res[2].first); // nonexistent
+    assert(mget_res[3].first && mget_res[3].second == "val3");
+
+    std::cout << "  -> Type & Multi-Operations PASSED!\n";
+}
+
 int main() {
     std::cout << "==========================================\n";
     std::cout << "  Running MiniRedis Comprehensive Tests   \n";
@@ -294,9 +396,11 @@ int main() {
     test_lru_eviction();
     test_list_operations();
     test_hash_operations();
+    test_set_operations();
+    test_type_and_multi_operations();
     test_resp_parser();
     test_wal_recovery();
 
-    std::cout << "\n>>> ALL 8 TEST SUITES PASSED FLAWLESSLY! <<<\n";
+    std::cout << "\n>>> ALL 10 TEST SUITES PASSED FLAWLESSLY! <<<\n";
     return 0;
 }

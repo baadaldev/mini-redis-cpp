@@ -4,13 +4,15 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <chrono>
 #include <cstdint>
 
 enum class ValueType {
     STRING,
     LIST,
-    HASH
+    HASH,
+    SET
 };
 
 struct Entry {
@@ -18,6 +20,7 @@ struct Entry {
     std::string string_val;
     std::vector<std::string> list_val;
     std::unordered_map<std::string, std::string> hash_val;
+    std::unordered_set<std::string> set_val;
     int64_t expire_at_ms; // -1 means no expiration, otherwise epoch timestamp in ms
 
     Entry() : type(ValueType::STRING), expire_at_ms(-1) {}
@@ -30,6 +33,9 @@ struct Entry {
 
     explicit Entry(const std::unordered_map<std::string, std::string>& h, int64_t expire_ms = -1)
         : type(ValueType::HASH), hash_val(h), expire_at_ms(expire_ms) {}
+
+    explicit Entry(const std::unordered_set<std::string>& s, int64_t expire_ms = -1)
+        : type(ValueType::SET), set_val(s), expire_at_ms(expire_ms) {}
 
     bool is_expired(int64_t now_ms) const {
         if (expire_at_ms == -1) return false;

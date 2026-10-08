@@ -44,9 +44,22 @@ public:
     bool hkeys(const std::string& key, std::vector<std::string>& keys, std::string& err_msg);
     bool hvals(const std::string& key, std::vector<std::string>& vals, std::string& err_msg);
 
+    // Set operations
+    bool sadd(const std::string& key, const std::vector<std::string>& members, int& added_count, std::string& err_msg);
+    bool smembers(const std::string& key, std::vector<std::string>& members, std::string& err_msg);
+    bool sismember(const std::string& key, const std::string& member, bool& is_member, std::string& err_msg);
+    bool srem(const std::string& key, const std::vector<std::string>& members, int& removed_count, std::string& err_msg);
+    bool scard(const std::string& key, size_t& card, std::string& err_msg);
+
+    // Key utilities & Multi operations
+    std::string type(const std::string& key);
+    std::vector<std::pair<bool, std::string>> mget(const std::vector<std::string>& keys);
+    bool mset(const std::vector<std::pair<std::string, std::string>>& kvs);
+
     // Retrieval helpers for persistence & inspection
     bool get_hash(const std::string& key, std::unordered_map<std::string, std::string>& hash_map);
     bool get_list(const std::string& key, std::vector<std::string>& list);
+    bool get_set(const std::string& key, std::unordered_set<std::string>& set_members);
 
     // Server management
     void flushall();

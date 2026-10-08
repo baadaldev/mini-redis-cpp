@@ -547,3 +547,186 @@ bool StorageEngine::get_list(const std::string& key, std::vector<std::string>& l
     return true;
 }
 
+bool StorageEngine::sadd(const std::string& key, const std::vector<std::string>& members, int& added_count, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    added_count = 0;
+    int64_t now = current_time_ms();
+    is_expired_locked(key, now);
+
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+        std::unordered_set<std::string> s;
+        for (const auto& m : members) {
+            if (s.insert(m).second) {
+                added_count++;
+            }
+        }
+        store_[key] = Entry(s);
+        touch_lru_locked(key);
+        evict_if_needed_locked();
+        return true;
+    }
+
+    if (it->second.type != ValueType::SET) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& m : members) {
+        if (it->second.set_val.insert(m).second) {
+            added_count++;
+        }
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::smembers(const std::string& key, std::vector<std::string>& members, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    members.clear();
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::SET) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& m : it->second.set_val) {
+        members.push_back(m);
+    }
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::sismember(const std::string& key, const std::string& member, bool& is_member, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    is_member = false;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::SET) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    is_member = (it->second.set_val.find(member) != it->second.set_val.end());
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::srem(const std::string& key, const std::vector<std::string>& members, int& removed_count, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    removed_count = 0;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::SET) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    for (const auto& m : members) {
+        if (it->second.set_val.erase(m) > 0) {
+            removed_count++;
+        }
+    }
+
+    if (it->second.set_val.empty()) {
+        remove_key_locked(key);
+    } else {
+        touch_lru_locked(key);
+    }
+    return true;
+}
+
+bool StorageEngine::scard(const std::string& key, size_t& card, std::string& err_msg) {
+    LockGuard lock(mutex_);
+    card = 0;
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return true;
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return true;
+
+    if (it->second.type != ValueType::SET) {
+        err_msg = "WRONGTYPE Operation against a key holding the wrong kind of value";
+        return false;
+    }
+
+    card = it->second.set_val.size();
+    touch_lru_locked(key);
+    return true;
+}
+
+bool StorageEngine::get_set(const std::string& key, std::unordered_set<std::string>& set_members) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return false;
+
+    auto it = store_.find(key);
+    if (it == store_.end() || it->second.type != ValueType::SET) return false;
+
+    set_members = it->second.set_val;
+    return true;
+}
+
+std::string StorageEngine::type(const std::string& key) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    if (is_expired_locked(key, now)) return "none";
+
+    auto it = store_.find(key);
+    if (it == store_.end()) return "none";
+
+    switch (it->second.type) {
+        case ValueType::STRING: return "string";
+        case ValueType::LIST:   return "list";
+        case ValueType::HASH:   return "hash";
+        case ValueType::SET:    return "set";
+    }
+    return "none";
+}
+
+std::vector<std::pair<bool, std::string>> StorageEngine::mget(const std::vector<std::string>& keys) {
+    LockGuard lock(mutex_);
+    int64_t now = current_time_ms();
+    std::vector<std::pair<bool, std::string>> results;
+    results.reserve(keys.size());
+
+    for (const auto& key : keys) {
+        if (is_expired_locked(key, now)) {
+            results.push_back({false, ""});
+            continue;
+        }
+
+        auto it = store_.find(key);
+        if (it != store_.end() && it->second.type == ValueType::STRING) {
+            touch_lru_locked(key);
+            results.push_back({true, it->second.string_val});
+        } else {
+            results.push_back({false, ""});
+        }
+    }
+    return results;
+}
+
+bool StorageEngine::mset(const std::vector<std::pair<std::string, std::string>>& kvs) {
+    LockGuard lock(mutex_);
+    for (const auto& kv : kvs) {
+        store_[kv.first] = Entry(kv.second, -1);
+        touch_lru_locked(kv.first);
+        evict_if_needed_locked();
+    }
+    return true;
+}
+

@@ -102,6 +102,25 @@ size_t WalManager::recover(StorageEngine& engine) {
             std::string err;
             engine.hdel(tokens[1], fields, deleted, err);
             replayed_count++;
+        } else if (cmd == "SADD" && tokens.size() >= 3) {
+            std::vector<std::string> members(tokens.begin() + 2, tokens.end());
+            int added = 0;
+            std::string err;
+            engine.sadd(tokens[1], members, added, err);
+            replayed_count++;
+        } else if (cmd == "SREM" && tokens.size() >= 3) {
+            std::vector<std::string> members(tokens.begin() + 2, tokens.end());
+            int removed = 0;
+            std::string err;
+            engine.srem(tokens[1], members, removed, err);
+            replayed_count++;
+        } else if (cmd == "MSET" && tokens.size() >= 3) {
+            std::vector<std::pair<std::string, std::string>> kvs;
+            for (size_t i = 1; i + 1 < tokens.size(); i += 2) {
+                kvs.push_back({tokens[i], tokens[i + 1]});
+            }
+            engine.mset(kvs);
+            replayed_count++;
         } else if (cmd == "FLUSHALL") {
             engine.flushall();
             replayed_count++;
@@ -121,6 +140,7 @@ bool WalManager::rewrite(StorageEngine& engine) {
         std::string val;
         std::vector<std::string> list;
         std::unordered_map<std::string, std::string> hash_map;
+        std::unordered_set<std::string> set_members;
 
         if (engine.get(key, val)) {
             int64_t remaining_ttl = engine.ttl(key);
@@ -145,6 +165,11 @@ bool WalManager::rewrite(StorageEngine& engine) {
                 hset_cmd.push_back(pair.second);
             }
             std::string serialized = RespParser::format_array(hset_cmd);
+            tmp_file.write(serialized.data(), serialized.size());
+        } else if (engine.get_set(key, set_members) && !set_members.empty()) {
+            std::vector<std::string> sadd_cmd = {"SADD", key};
+            sadd_cmd.insert(sadd_cmd.end(), set_members.begin(), set_members.end());
+            std::string serialized = RespParser::format_array(sadd_cmd);
             tmp_file.write(serialized.data(), serialized.size());
         }
     }
