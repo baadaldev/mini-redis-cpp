@@ -397,6 +397,7 @@ std::string Server::handle_lrange(const std::vector<std::string>& tokens) {
 }
 
 std::string Server::handle_keys(const std::vector<std::string>& tokens) {
+    (void)tokens;
     std::vector<std::string> keys = storage_.get_all_keys();
     return RespParser::format_array(keys);
 }

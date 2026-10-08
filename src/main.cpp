@@ -1,9 +1,11 @@
 #include "network/server.hpp"
 #include <iostream>
 #include <string>
-#include <windows.h>
 
 Server* g_server = nullptr;
+
+#ifdef _WIN32
+#include <windows.h>
 
 BOOL WINAPI console_handler(DWORD signal) {
     if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT) {
@@ -15,6 +17,18 @@ BOOL WINAPI console_handler(DWORD signal) {
     }
     return FALSE;
 }
+#else
+#include <csignal>
+
+void posix_signal_handler(int signum) {
+    if (signum == SIGINT || signum == SIGTERM) {
+        std::cout << "\n[INFO] Graceful shutdown initiated. Saving WAL...\n";
+        if (g_server) {
+            g_server->stop();
+        }
+    }
+}
+#endif
 
 void print_banner() {
     std::cout << "\n"
@@ -47,7 +61,12 @@ int main(int argc, char* argv[]) {
     }
 
     print_banner();
+#ifdef _WIN32
     SetConsoleCtrlHandler(console_handler, TRUE);
+#else
+    signal(SIGINT, posix_signal_handler);
+    signal(SIGTERM, posix_signal_handler);
+#endif
 
     Server server(port, aof_path, max_keys);
     g_server = &server;

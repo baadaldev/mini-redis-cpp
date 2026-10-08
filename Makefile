@@ -1,11 +1,11 @@
 CXX ?= g++
-CXXFLAGS ?= -std=c++14 -O2 -Wall -Wextra
+CXXFLAGS ?= -std=c++14 -O2 -Wall -Wextra -Wno-unused-parameter
 LDFLAGS ?=
 
 # Detect Operating System
 ifeq ($(OS),Windows_NT)
     TARGET_SERVER = mini_redis.exe
-    TARGET_TEST = test.exe
+    TARGET_TEST = test_suite.exe
     LDFLAGS += -lws2_32
     RM = del /Q /F
 else
