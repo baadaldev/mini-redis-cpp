@@ -4,11 +4,19 @@
 *.obj
 *.dll
 *.so
+*.dylib
+mini_redis
+test_suite
+
+# Build directories
+build/
+cmake-build-*/
 
 # Database files
 *.aof
 *.aof.tmp
 *.log
+*.tmp
 
 # IDE & Editor files
 .vscode/

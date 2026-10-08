@@ -10,10 +10,10 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-echo [2/2] Compiling test.exe...
-g++ -std=c++14 tests/test_engine.cpp src/core/storage_engine.cpp src/protocol/resp_parser.cpp src/persistence/wal.cpp -O2 -o test.exe
+echo [2/2] Compiling test_suite.exe...
+g++ -std=c++14 tests/test_engine.cpp src/core/storage_engine.cpp src/protocol/resp_parser.cpp src/persistence/wal.cpp -lws2_32 -O2 -o test_suite.exe
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Failed to compile test.exe!
+    echo [ERROR] Failed to compile test_suite.exe!
     exit /b %ERRORLEVEL%
 )
 
@@ -21,7 +21,7 @@ echo.
 echo ========================================================
 echo   Running Automated Test Suite
 echo ========================================================
-test.exe
+test_suite.exe
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] One or more tests failed!
     exit /b %ERRORLEVEL%

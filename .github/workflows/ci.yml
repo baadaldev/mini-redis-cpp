@@ -1,0 +1,62 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Linux Build & Tests
+      - name: Build Server & Tests (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          make all
+
+      - name: Run C++ Unit Test Suite (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          ./test_suite
+
+      - name: Run Python Client Integration Tests (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          ./mini_redis --port 6379 --aof data.aof &
+          sleep 2
+          python client/test_client.py 6379
+
+      # Windows Build & Tests
+      - name: Build Server & Tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          g++ -std=c++14 src/main.cpp src/network/server.cpp src/core/storage_engine.cpp src/protocol/resp_parser.cpp src/persistence/wal.cpp -lws2_32 -O2 -o mini_redis.exe
+          g++ -std=c++14 tests/test_engine.cpp src/core/storage_engine.cpp src/protocol/resp_parser.cpp src/persistence/wal.cpp -lws2_32 -O2 -o test.exe
+
+      - name: Run C++ Unit Test Suite (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .\test.exe
+
+      - name: Run Python Client Integration Tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Start-Process -FilePath ".\mini_redis.exe" -ArgumentList "--port 6379 --aof data.aof"
+          Start-Sleep -Seconds 2
+          python client/test_client.py 6379
