@@ -1,14 +1,14 @@
 # MiniRedis-CPP 🚀
-#test 10
-#For my personal use
 
-A high-performance, in-memory key-value database engine built from scratch in modern **C++**, featuring **RESP (REdis Serialization Protocol)** compliance, **LRU Cache Eviction**, **TTL (Time-To-Live)** expiration, and **WAL (Write-Ahead Logging / AOF)** durability.
+A high-performance, cross-platform in-memory key-value database engine built from scratch in modern **C++**, featuring **RESP (REdis Serialization Protocol)** compliance, **LRU Cache Eviction**, **TTL (Time-To-Live)** expiration, **Sets & Hashes**, and **WAL (Write-Ahead Logging / AOF)** durability.
 
+[![CI Pipeline](https://github.com/baadaldev/mini-redis-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/baadaldev/mini-redis-cpp/actions/workflows/ci.yml)
 [![Language](https://img.shields.io/badge/Language-C%2B%2B14%2F17-00599C?logo=c%2B%2B)](https://isocpp.org/)
 [![Protocol](https://img.shields.io/badge/Protocol-RESP%20Compliant-red?logo=redis)](https://redis.io/docs/reference/protocol-spec/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20(Winsock2)-0078D6?logo=windows)](https://microsoft.com)
-[![Tests](https://img.shields.io/badge/Tests-8%2F8%20Passed-brightgreen)](#automated-testing)
-[![Throughput](https://img.shields.io/badge/Throughput-35%2C000%2B%20ops%2Fsec-orange)](#performance--benchmarks)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](#-quick-start)
+[![Tests](https://img.shields.io/badge/Tests-10%2F10%20Passed-brightgreen)](#-automated-testing)
+[![Throughput](https://img.shields.io/badge/Throughput-35%2C000%2B%20ops%2Fsec-orange)](#-performance--benchmarks)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
@@ -18,13 +18,13 @@ A high-performance, in-memory key-value database engine built from scratch in mo
                                  [Clients]
            (redis-cli, Python redis-py, Node ioredis, WebSockets)
                                      │
-                                     │  TCP Sockets (RESP)
+                                     │  TCP Sockets (RESP Protocol)
                                      ▼
  ┌────────────────────────────────────────────────────────────────────────┐
  │                           MiniRedis Server                             │
  │                                                                        │
  │  ┌──────────────────────────────────────────────────────────────────┐  │
- │  │ 1. Network Layer (Winsock2 TCP Multi-Client Concurrency)         │  │
+ │  │ 1. Cross-Platform Network Layer (Winsock2 & POSIX Berkeley TCP)  │  │
  │  └──────────────────────────────────┬───────────────────────────────┘  │
  │                                     ▼                                  │
  │  ┌──────────────────────────────────────────────────────────────────┐  │
@@ -33,9 +33,11 @@ A high-performance, in-memory key-value database engine built from scratch in mo
  │                                     ▼                                  │
  │  ┌──────────────────────────────────────────────────────────────────┐  │
  │  │ 3. In-Memory Storage Engine                                      │  │
- │  │    • Strings & Atomic Integers (INCR/DECR)                       │  │
+ │  │    • Strings & Atomic Integers (INCR/DECR/MGET/MSET)             │  │
  │  │    • Doubly Linked Lists (LPUSH/RPUSH/LRANGE)                    │  │
- │  │    • High-Performance Win32 Mutex & LockGuard Thread-Safety      │  │
+ │  │    • Hash Tables (HSET/HGET/HGETALL/HDEL)                        │  │
+ │  │    • Unordered Sets (SADD/SMEMBERS/SISMEMBER/SREM/SCARD)         │  │
+ │  │    • Lock-Safe Mutex & LockGuard Concurrency (Win32 & POSIX)     │  │
  │  └──────────────────┬───────────────────────────────┬───────────────┘  │
  │                     ▼                               ▼                  │
  │  ┌────────────────────────────────────┐ ┌───────────────────────────┐  │
@@ -53,11 +55,17 @@ A high-performance, in-memory key-value database engine built from scratch in mo
 
 ## ✨ Key Features
 
-* **Sub-Millisecond In-Memory Store:** $O(1)$ key lookup and mutation using hash tables with lock-safe concurrency.
-* **Full RESP Compatibility:** Seamlessly speaks the Redis Serialization Protocol. You can connect using official `redis-cli`, Python `redis`, Node `ioredis`, or plain TCP sockets.
-* **Multi-Client Concurrency:** Non-blocking connection management handling concurrent client requests simultaneously.
+* **Sub-Millisecond In-Memory Store:** $O(1)$ key lookup and mutation using hash tables with lock-safe multi-client concurrency.
+* **Full RESP Compatibility:** Speaks the standard Redis Serialization Protocol. Connect using official `redis-cli`, Python `redis`, Node `ioredis`, or plain TCP sockets.
+* **Rich Data Structures:**
+  * **Strings & Counters:** `SET`, `GET`, `MSET`, `MGET`, `INCR`, `DECR`, `INCRBY`, `DECRBY`.
+  * **Lists:** `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`.
+  * **Hashes:** `HSET`, `HGET`, `HMSET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HGETALL`, `HKEYS`, `HVALS`.
+  * **Sets:** `SADD`, `SMEMBERS`, `SISMEMBER`, `SREM`, `SCARD`.
+  * **Key Inspection:** `TYPE`, `EXISTS`, `DEL`, `KEYS`, `DBSIZE`.
+* **Cross-Platform Compatibility:** Native support for **Windows** (Winsock2) and **Linux / macOS** (POSIX Berkeley Sockets & pthreads).
 * **Memory Management & LRU Eviction:** Configurable memory limits. Automatically evicts the least recently accessed keys when maximum capacity is reached.
-* **Active & Passive TTL (Time-To-Live):** Keys expire automatically with `EXPIRE`, `TTL`, or `SETEX`. Expired keys are lazily cleaned on access and actively purged via a background thread.
+* **Active & Passive TTL (Time-To-Live):** Keys expire automatically with `EXPIRE` and `TTL`. Expired keys are lazily cleaned on access and actively purged via a background thread.
 * **Durability via Write-Ahead Logging (WAL / AOF):** Every mutating command is persisted sequentially to disk. On reboot or crash, the server automatically recovers its full in-memory state.
 * **AOF Compaction:** Supports `BGREWRITEAOF` to compact the log file and eliminate stale, overwritten, or deleted keys.
 
@@ -80,39 +88,48 @@ Benchmarked locally using `client/benchmark.py` over loopback TCP:
 
 | Category | Commands | Description |
 | :--- | :--- | :--- |
-| **Strings** | `SET key value [EX sec]` | Store string value with optional expiration |
+| **Strings** | `SET key value [EX sec] [PX ms]` | Store string value with optional expiration |
 | | `GET key` | Retrieve string value |
+| | `MSET key val [key val ...]` | Set multiple keys to multiple values |
+| | `MGET key [key ...]` | Get values of all specified keys |
 | | `DEL key [key2 ...]` | Delete one or more keys |
-| | `EXISTS key [key2 ...]`| Check if key(s) exist |
+| | `EXISTS key [key2 ...]` | Check if key(s) exist |
+| | `TYPE key` | Return key type (`string`, `list`, `hash`, `set`, `none`) |
 | **Counters** | `INCR key` / `DECR key` | Atomically increment / decrement integer value |
-| | `INCRBY key delta` | Increment by arbitrary integer step |
-| **Lists** | `LPUSH` / `RPUSH` | Insert one or multiple elements at head or tail |
-| | `LPOP` / `RPOP` | Remove and return element from head or tail |
-| | `LRANGE key start stop`| Slice list elements (supports negative indexing) |
-| **Hashes** | `HSET key f v [f v ...]`| Set one or multiple field/value pairs in hash |
+| | `INCRBY key delta` / `DECRBY key delta` | Increment / decrement by arbitrary integer step |
+| **Lists** | `LPUSH key val [val ...]` / `RPUSH` | Insert one or multiple elements at head or tail |
+| | `LPOP key` / `RPOP key` | Remove and return element from head or tail |
+| | `LRANGE key start stop` | Slice list elements (supports negative indexing) |
+| **Hashes** | `HSET key field val [f v ...]` | Set one or multiple field/value pairs in hash |
 | | `HGET key field` | Retrieve field value from hash |
 | | `HMSET` / `HMGET` | Set or get multiple hash fields at once |
-| | `HDEL key f [f ...]` | Delete one or more fields from hash |
+| | `HDEL key field [f ...]` | Delete one or more fields from hash |
 | | `HEXISTS key field` | Check if field exists in hash |
 | | `HLEN key` | Get total count of fields in hash |
 | | `HGETALL key` | Return all fields and values in hash |
 | | `HKEYS` / `HVALS` | Return all field names or values in hash |
+| **Sets** | `SADD key member [mem ...]` | Add one or multiple members to a set |
+| | `SMEMBERS key` | Return all members of the set |
+| | `SISMEMBER key member` | Determine if a member exists in the set |
+| | `SREM key member [mem ...]` | Remove one or more members from a set |
+| | `SCARD key` | Return the number of elements in the set |
 | **TTL** | `EXPIRE key seconds` | Set timeout on key |
 | | `TTL key` | Return remaining time to live in seconds |
-| **Persistence** | `BGREWRITEAOF` | Asynchronously rewrite append-only log file |
-| **Server** | `PING`, `ECHO`, `INFO` | Connection health, echo message, server stats |
+| **Persistence** | `BGREWRITEAOF` | Compact and rewrite append-only log file |
+| **Server** | `PING [msg]`, `ECHO msg`, `INFO` | Connection health, echo message, server stats |
 | | `DBSIZE`, `FLUSHALL` | Get active key count, wipe database clean |
 
 ---
 
 ## 🛠️ Project Structure
+
 ```text
 mini-redis-cpp/
 ├── src/
 │   ├── core/
-│   │   ├── entry.hpp              # Value variant representation & TTL metadata
-│   │   ├── sync.hpp               # High-performance Win32 Mutex & LockGuard RAII
-│   │   ├── storage_engine.hpp     # In-memory storage with LRU, Hashes & TTL
+│   │   ├── entry.hpp              # Value variant (String, List, Hash, Set) & TTL
+│   │   ├── sync.hpp               # Cross-platform Mutex & LockGuard RAII (Win32 & POSIX)
+│   │   ├── storage_engine.hpp     # In-memory storage with LRU, Sets, Hashes & TTL
 │   │   └── storage_engine.cpp
 │   ├── protocol/
 │   │   ├── resp_parser.hpp        # RESP parser & serializer
@@ -121,15 +138,20 @@ mini-redis-cpp/
 │   │   ├── wal.hpp                # Write-Ahead Logging & crash recovery
 │   │   └── wal.cpp
 │   ├── network/
-│   │   ├── server.hpp             # Winsock2 TCP server & command dispatcher
+│   │   ├── server.hpp             # Cross-platform TCP server (Winsock & BSD Sockets)
 │   │   └── server.cpp
 │   └── main.cpp                   # CLI parsing, banner, & graceful shutdown
 ├── tests/
-│   └── test_engine.cpp            # 8-phase automated test suite
+│   └── test_engine.cpp            # 10-phase comprehensive automated test suite
 ├── client/
 │   ├── test_client.py             # Live TCP integration tests
 │   └── benchmark.py               # Throughput & latency benchmark
-├── build.bat                      # One-click Windows compilation script
+├── .github/
+│   └── workflows/
+│       └── ci.yml                 # Matrix CI Pipeline (Linux & Windows)
+├── Makefile                       # Unix / macOS build script
+├── CMakeLists.txt                 # Modern CMake build definition
+├── build.bat                      # Windows build script
 └── README.md
 ```
 
@@ -138,66 +160,99 @@ mini-redis-cpp/
 ## 🚀 Quick Start
 
 ### 1. Build Server & Run Unit Tests
-Clone the repository and run the build script:
+
+#### On Linux / macOS:
+```bash
+make all
+./test_suite
+```
+
+#### On Windows (using `build.bat`):
 ```cmd
 build.bat
 ```
-This compiles `mini_redis.exe` and executes all 8 unit test suites.
+
+#### Using CMake (Cross-Platform):
+```bash
+cmake -B build
+cmake --build build
+```
+
+---
 
 ### 2. Start the Server
-```cmd
+
+```bash
+# Start server on default port 6379 with WAL persistence
+./mini_redis --port 6379 --aof data.aof
+
+# On Windows:
 .\mini_redis.exe --port 6379 --aof data.aof
 ```
 
-### 3. Connect via Python Client or redis-cli
-You can connect using any standard Redis client or the included test client:
-```cmd
-python client/test_client.py 6379
+---
 
+### 3. Connect via Python or redis-cli
+
+#### Interactive `redis-cli`:
+```bash
+redis-cli -p 6379
+
+127.0.0.1:6379> SADD skills "C++" "Redis" "Systems"
+(integer) 3
+127.0.0.1:6379> SISMEMBER skills "C++"
+(integer) 1
+127.0.0.1:6379> SMEMBERS skills
+1) "C++"
+2) "Redis"
+3) "Systems"
+127.0.0.1:6379> TYPE skills
++set
+127.0.0.1:6379> MSET lang1 "C++" lang2 "Python"
++OK
+127.0.0.1:6379> MGET lang1 lang2
+1) "C++"
+2) "Python"
 ```
+
+#### Automated Client Tests:
+```bash
+python client/test_client.py 6379
+```
+
+#### Run Performance Benchmark:
+```bash
+python client/benchmark.py 6379 2000
+```
+
+---
+
 ## ⚙️ Configuration & CLI Flags
-The server accepts several command-line flags to customize runtime behavior:
+
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `--port <num>` | `6379` | TCP port number to listen on |
 | `--aof <file>` | `data.aof` | Path to the Append-Only File for WAL persistence |
-| `--maxmemory <bytes>` | `100MB` | Maximum memory limit before LRU eviction triggers |
-| `--sync-every-write` | `true` | Flush write-ahead log to disk synchronously on mutation |
-
-Or connect via interactive `redis-cli`:
-```bash
-redis-cli -p 6379
-127.0.0.1:6379> HSET user:100 name "Baadal" role "Engineer"
-(integer) 2
-127.0.0.1:6379> HGET user:100 name
-"Baadal"
-127.0.0.1:6379> HGETALL user:100
-1) "name"
-2) "Baadal"
-3) "role"
-4) "Engineer"
-```
+| `--maxkeys <num>` | `0` (unlimited) | Maximum key limit before LRU eviction triggers |
 
 ---
 
 ## 🧪 Automated Testing
 
-The automated test suite verifies 8 critical database subsystems:
+The automated test suite verifies 10 critical database subsystems:
 1. **Basic CRUD:** `SET`, `GET`, `DEL`, `EXISTS` semantics.
-2. **Numeric Increment:** Type checking and atomicity on `INCRBY`.
+2. **Numeric Increment:** Type checking and atomicity on `INCRBY` / `DECRBY`.
 3. **TTL & Expiry:** Millisecond accuracy and auto-cleanup.
 4. **LRU Cache Eviction:** Capacity limits and eviction of least recently accessed keys.
 5. **List Operations:** Negative indexing, `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`.
 6. **Hash Operations:** `HSET`, `HGET`, `HMSET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HGETALL`, `HKEYS`, `HVALS`.
-7. **RESP Parser:** Verification of Arrays, Bulk Strings, Inlines, Errors, and Integers.
-8. **WAL Durability:** Simulated crash and 100% state recovery from append-only logs.
-
-Run tests anytime:
-```cmd
-.\test.exe
-```
+7. **Set Operations:** `SADD`, `SMEMBERS`, `SISMEMBER`, `SREM`, `SCARD`.
+8. **Type & Multi-Operations:** `TYPE`, `MSET`, `MGET`.
+9. **RESP Parser:** Verification of Arrays, Bulk Strings, Inlines, Errors, and Integers.
+10. **WAL Durability:** Simulated crash and 100% state recovery from append-only logs.
 
 ---
 
 ## 📜 License
-MIT License. Created by [Md Rakibul Islam (Baadal)](https://github.com/baadaldev).
+
+Distributed under the **MIT License**. Created by [Md Rakibul Islam (Baadal)](https://github.com/baadaldev).
